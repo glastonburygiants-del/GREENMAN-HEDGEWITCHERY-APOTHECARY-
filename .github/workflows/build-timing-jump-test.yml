@@ -28,12 +28,12 @@ jobs:
           from pathlib import Path
           p=Path('GREENMAN_EDITABLE_CURRENT.html')
           s=p.read_text(encoding='utf-8')
-          old_planet="""  closeKb();\n  render();\n  jumpTo('timing');\n}"""
-          new_planet="""  closeKb();\n  render();\n}"""
-          old_planet_first="""    closeKb();\n    render();\n    jumpTo('timing');\n    return;"""
-          new_planet_first="""    closeKb();\n    render();\n    return;"""
-          old_moon="""      showP(key, btn);\n      // Scroll to phase detail\n      document.getElementById('pd-icon').parentElement.scrollIntoView({behavior:'smooth', block:'start'});"""
-          new_moon="""      showP(key, btn);"""
+          old_planet=r"closeKb();\n  render();\n  jumpTo('timing');\n}"
+          new_planet=r"closeKb();\n  render();\n}"
+          old_planet_first=r"closeKb();\n    render();\n    jumpTo('timing');\n    return;"
+          new_planet_first=r"closeKb();\n    render();\n    return;"
+          old_moon=r"showP(key, btn);\n      // Scroll to phase detail\n      document.getElementById('pd-icon').parentElement.scrollIntoView({behavior:'smooth', block:'start'});"
+          new_moon=r"showP(key, btn);"
           for label,old,new in [
               ('Planet item selection',old_planet,new_planet),
               ('Planet first-match selection',old_planet_first,new_planet_first),
