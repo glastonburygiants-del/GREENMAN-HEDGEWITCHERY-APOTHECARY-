@@ -21,23 +21,29 @@ jobs:
           test -s GREENMAN_EDITABLE_CURRENT.html
           sha256sum GREENMAN_HEDGEWITCHERY.apk GREENMAN_EDITABLE_CURRENT.html
 
-      - name: Remove only the two automatic timing jumps
+      - name: Remove only the automatic timing jumps
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
           p=Path('GREENMAN_EDITABLE_CURRENT.html')
           s=p.read_text(encoding='utf-8')
-          old1="selectItem(name);jumpTo('timing')"
-          new1="selectItem(name)"
-          old2="switchToPhase(phase,true)"
-          new2="switchToPhase(phase,false)"
-          c1=s.count(old1); c2=s.count(old2)
-          if c1 != 1: raise SystemExit(f'Planet timing jump signature expected once, found {c1}')
-          if c2 != 1: raise SystemExit(f'Moon timing jump signature expected once, found {c2}')
-          s=s.replace(old1,new1,1).replace(old2,new2,1)
+          old_planet="""  closeKb();\n  render();\n  jumpTo('timing');\n}"""
+          new_planet="""  closeKb();\n  render();\n}"""
+          old_planet_first="""    closeKb();\n    render();\n    jumpTo('timing');\n    return;"""
+          new_planet_first="""    closeKb();\n    render();\n    return;"""
+          old_moon="""      showP(key, btn);\n      // Scroll to phase detail\n      document.getElementById('pd-icon').parentElement.scrollIntoView({behavior:'smooth', block:'start'});"""
+          new_moon="""      showP(key, btn);"""
+          for label,old,new in [
+              ('Planet item selection',old_planet,new_planet),
+              ('Planet first-match selection',old_planet_first,new_planet_first),
+              ('Moon item phase selection',old_moon,new_moon),
+          ]:
+              c=s.count(old)
+              if c != 1: raise SystemExit(f'{label}: expected 1 exact match, found {c}')
+              s=s.replace(old,new,1)
           p.write_text(s,encoding='utf-8')
-          print('Changed only the two timing selection auto-jump signatures')
+          print('Removed only the three automatic scroll calls used after item selection')
           PY
 
       - name: Repack exact current APK with edited HTML
