@@ -1,0 +1,101 @@
+name: Rebuild Greenman APK
+
+on:
+  push:
+    branches:
+      - android13-clean-workflow
+  workflow_dispatch:
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Java and Android tools
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install apktool and Android build tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y apktool
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;35.0.0"
+
+      - name: Decode original APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          apktool d -f GREENMAN_HEDGEWITCHERY.apk -o decoded
+
+      - name: Rebuild APK with apktool
+        shell: bash
+        run: |
+          set -euxo pipefail
+          apktool b decoded -o rebuilt-unsigned.apk
+
+      - name: Zipalign APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          "$BT/zipalign" -f -v 4 rebuilt-unsigned.apk rebuilt-aligned.apk
+          "$BT/zipalign" -c -v 4 rebuilt-aligned.apk
+
+      - name: Generate test signing key
+        shell: bash
+        run: |
+          set -euxo pipefail
+          keytool -genkeypair -noprompt \
+            -keystore greenman-test.keystore \
+            -storepass changeit \
+            -keypass changeit \
+            -alias greenman \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Greenman Test,O=Greenman,C=GB"
+
+      - name: Sign with Android apksigner
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          "$BT/apksigner" sign \
+            --ks greenman-test.keystore \
+            --ks-key-alias greenman \
+            --ks-pass pass:changeit \
+            --key-pass pass:changeit \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --v4-signing-enabled false \
+            --out GREENMAN_HEDGEWITCHERY_GITHUB_REBUILT.apk \
+            rebuilt-aligned.apk
+
+      - name: Verify final APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          "$BT/apksigner" verify --verbose --print-certs GREENMAN_HEDGEWITCHERY_GITHUB_REBUILT.apk
+          "$BT/zipalign" -c -v 4 GREENMAN_HEDGEWITCHERY_GITHUB_REBUILT.apk
+          unzip -t GREENMAN_HEDGEWITCHERY_GITHUB_REBUILT.apk
+          "$BT/aapt" dump badging GREENMAN_HEDGEWITCHERY_GITHUB_REBUILT.apk | tee apk-badging.txt
+          sha256sum GREENMAN_HEDGEWITCHERY_GITHUB_REBUILT.apk | tee apk-sha256.txt
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: greenman-github-rebuilt-apk
+          path: |
+            GREENMAN_HEDGEWITCHERY_GITHUB_REBUILT.apk
+            apk-badging.txt
+            apk-sha256.txt
+          if-no-files-found: error
