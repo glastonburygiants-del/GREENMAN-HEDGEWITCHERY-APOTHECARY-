@@ -13,18 +13,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Java and Android tools
-        uses: actions/setup-java@v4
+      - name: Install Java
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Install apktool and Android build tools
+      - name: Install current Apktool and Android build tools
         shell: bash
         run: |
           set -euxo pipefail
-          sudo apt-get update
-          sudo apt-get install -y apktool
+          curl -L --fail --retry 3 \
+            -o apktool.jar \
+            https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar
+          java -jar apktool.jar --version
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;35.0.0"
 
@@ -32,13 +34,13 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          apktool d -f GREENMAN_HEDGEWITCHERY.apk -o decoded
+          java -jar apktool.jar d -f GREENMAN_HEDGEWITCHERY.apk -o decoded
 
-      - name: Rebuild APK with apktool
+      - name: Rebuild APK with current Apktool
         shell: bash
         run: |
           set -euxo pipefail
-          apktool b decoded -o rebuilt-unsigned.apk
+          java -jar apktool.jar b decoded -o rebuilt-unsigned.apk
 
       - name: Zipalign APK
         shell: bash
@@ -48,7 +50,7 @@ jobs:
           "$BT/zipalign" -f -v 4 rebuilt-unsigned.apk rebuilt-aligned.apk
           "$BT/zipalign" -c -v 4 rebuilt-aligned.apk
 
-      - name: Generate test signing key
+      - name: Generate clean test signing key
         shell: bash
         run: |
           set -euxo pipefail
@@ -62,7 +64,7 @@ jobs:
             -validity 10000 \
             -dname "CN=Greenman Test,O=Greenman,C=GB"
 
-      - name: Sign with Android apksigner
+      - name: Sign with official Android apksigner
         shell: bash
         run: |
           set -euxo pipefail
@@ -84,7 +86,7 @@ jobs:
         run: |
           set -euxo pipefail
           BT="$ANDROID_HOME/build-tools/35.0.0"
-          "$BT/apksigner" verify --verbose --print-certs GREENMAN_HEDGEWITCHERY_GITHUB_REBUILT.apk
+          "$BT/apksigner" verify --verbose --print-certs GREENMAN_HEDGEWITCHERY_GITHUB_REBUILT.apk | tee apk-signature.txt
           "$BT/zipalign" -c -v 4 GREENMAN_HEDGEWITCHERY_GITHUB_REBUILT.apk
           unzip -t GREENMAN_HEDGEWITCHERY_GITHUB_REBUILT.apk
           "$BT/aapt" dump badging GREENMAN_HEDGEWITCHERY_GITHUB_REBUILT.apk | tee apk-badging.txt
@@ -97,5 +99,6 @@ jobs:
           path: |
             GREENMAN_HEDGEWITCHERY_GITHUB_REBUILT.apk
             apk-badging.txt
+            apk-signature.txt
             apk-sha256.txt
           if-no-files-found: error
