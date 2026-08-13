@@ -1,0 +1,205 @@
+name: Build Clean Tablet Shell
+
+on:
+  push:
+    branches:
+      - android13-clean-workflow
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Create clean Android project
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p tablet-clean/app/src/main/java/com/greenman/hedgewitchery
+          mkdir -p tablet-clean/app/src/main/res/values
+          mkdir -p tablet-clean/app/src/main/res/drawable-nodpi
+          mkdir -p tablet-clean/app/src/main/res/drawable
+          mkdir -p tablet-clean/app/src/main/res/mipmap-anydpi-v26
+          mkdir -p tablet-clean/app/src/main/assets
+
+          cat > tablet-clean/settings.gradle <<'EOF'
+          pluginManagement {
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories { google(); mavenCentral() }
+          }
+          rootProject.name = 'GreenmanTabletShell'
+          include ':app'
+          EOF
+
+          cat > tablet-clean/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+          }
+          EOF
+
+          cat > tablet-clean/app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.greenman.hedgewitchery.tablet'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.greenman.hedgewitchery.tablet'
+                  minSdk 29
+                  targetSdk 35
+                  versionCode 1
+                  versionName '1.0-tablet-clean-shell'
+              }
+          }
+          EOF
+
+          cat > tablet-clean/app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:allowBackup="false"
+                  android:hardwareAccelerated="true"
+                  android:label="Greenman HedgeWitchery"
+                  android:icon="@mipmap/ic_launcher"
+                  android:roundIcon="@mipmap/ic_launcher_round"
+                  android:supportsRtl="true"
+                  android:theme="@style/Theme.Greenman">
+                  <activity
+                      android:name="com.greenman.hedgewitchery.MainActivity"
+                      android:exported="true"
+                      android:launchMode="singleTask"
+                      android:screenOrientation="unspecified"
+                      android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|uiMode">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > tablet-clean/app/src/main/res/values/styles.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Theme.Greenman" parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:windowActionModeOverlay">true</item>
+                  <item name="android:windowNoTitle">true</item>
+                  <item name="android:colorAccent">#C7A85A</item>
+                  <item name="android:navigationBarColor">#2A1A08</item>
+                  <item name="android:statusBarColor">#2A1A08</item>
+                  <item name="android:windowLightStatusBar">false</item>
+                  <item name="android:windowLightNavigationBar">false</item>
+              </style>
+          </resources>
+          EOF
+
+          # Placeholder launcher art. The finished phone APK art is injected after download.
+          python3 - <<'PY'
+          import base64, pathlib
+          # 1x1 WebP placeholder
+          data=base64.b64decode('UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEAAUAmJaQAA3AA/v89WAAAAA==')
+          pathlib.Path('tablet-clean/app/src/main/res/drawable-nodpi/greenman_launcher_art.webp').write_bytes(data)
+          PY
+
+          cat > tablet-clean/app/src/main/res/drawable/ic_launcher_foreground.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+              <item android:drawable="@drawable/greenman_launcher_art" />
+          </layer-list>
+          EOF
+
+          cat > tablet-clean/app/src/main/res/values/colors.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <color name="launcher_bg">#183D24</color>
+          </resources>
+          EOF
+
+          cat > tablet-clean/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@color/launcher_bg" />
+              <foreground android:drawable="@drawable/ic_launcher_foreground" />
+          </adaptive-icon>
+          EOF
+          cp tablet-clean/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml tablet-clean/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+
+          # Legacy icon aliases for devices/launchers that do not use adaptive icons.
+          mkdir -p tablet-clean/app/src/main/res/mipmap
+          cat > tablet-clean/app/src/main/res/mipmap/ic_launcher.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+              <item android:drawable="@drawable/greenman_launcher_art" />
+          </layer-list>
+          EOF
+          cp tablet-clean/app/src/main/res/mipmap/ic_launcher.xml tablet-clean/app/src/main/res/mipmap/ic_launcher_round.xml
+
+          # Dummy class only to let AAPT/Gradle produce a conventional Android package.
+          # Its DEX is removed and replaced by the exact native DEX from the protected phone APK.
+          cat > tablet-clean/app/src/main/java/com/greenman/hedgewitchery/MainActivity.java <<'EOF'
+          package com.greenman.hedgewitchery;
+          import android.app.Activity;
+          public final class MainActivity extends Activity { }
+          EOF
+
+          cat > tablet-clean/app/src/main/assets/index.html <<'EOF'
+          <!doctype html><html><body>Greenman tablet shell placeholder</body></html>
+          EOF
+
+      - name: Build conventional AAPT2 wrapper
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd tablet-clean
+          gradle --no-daemon :app:assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk ../GREENMAN_TABLET_CLEAN_WRAPPER.apk
+
+      - name: Package official Android signing tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          test -x "$BT/zipalign"
+          test -f "$BT/apksigner"
+          test -f "$BT/lib/apksigner.jar"
+          mkdir -p sign-tools/lib
+          cp "$BT/zipalign" sign-tools/
+          cp "$BT/apksigner" sign-tools/
+          cp "$BT/lib/apksigner.jar" sign-tools/lib/
+          chmod +x sign-tools/zipalign sign-tools/apksigner
+          zip -qr android-sign-tools.zip sign-tools
+
+      - name: Inspect wrapper
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          "$BT/aapt" dump badging GREENMAN_TABLET_CLEAN_WRAPPER.apk | tee wrapper-badging.txt
+          unzip -lv GREENMAN_TABLET_CLEAN_WRAPPER.apk | tee wrapper-zip.txt
+
+      - name: Upload clean wrapper and tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: greenman-tablet-clean-wrapper
+          path: |
+            GREENMAN_TABLET_CLEAN_WRAPPER.apk
+            android-sign-tools.zip
+            wrapper-badging.txt
+            wrapper-zip.txt
+          if-no-files-found: error
