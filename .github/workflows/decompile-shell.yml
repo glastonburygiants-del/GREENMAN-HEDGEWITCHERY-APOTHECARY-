@@ -1,0 +1,46 @@
+name: Decompile Greenman Shell
+
+on:
+  push:
+    branches:
+      - android13-clean-workflow
+  workflow_dispatch:
+
+jobs:
+  decompile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install JADX
+        shell: bash
+        run: |
+          set -euxo pipefail
+          wget -q https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip -O /tmp/jadx.zip
+          unzip -q /tmp/jadx.zip -d /tmp/jadx
+          chmod +x /tmp/jadx/bin/jadx
+
+      - name: Decompile shell
+        shell: bash
+        run: |
+          set -euxo pipefail
+          /tmp/jadx/bin/jadx -d decompiled GREENMAN_HEDGEWITCHERY.apk
+          find decompiled/sources/com/greenman/hedgewitchery -maxdepth 2 -type f -print || true
+          sed -n '1,260p' decompiled/sources/com/greenman/hedgewitchery/MainActivity.java > MainActivity.java
+          cat MainActivity.java
+
+      - name: Upload shell source
+        uses: actions/upload-artifact@v4
+        with:
+          name: greenman-shell-source
+          path: |
+            MainActivity.java
+            decompiled/sources/com/greenman/hedgewitchery/
+          if-no-files-found: error
