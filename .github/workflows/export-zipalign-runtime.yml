@@ -1,0 +1,31 @@
+name: Export Zipalign Runtime
+
+on:
+  push:
+    branches:
+      - android13-clean-workflow
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package zipalign runtime
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          test -x "$BT/zipalign"
+          mkdir -p out/lib
+          cp "$BT/zipalign" out/
+          ldd "$BT/zipalign" | tee out/ldd.txt
+          while read -r p; do
+            [ -f "$p" ] && cp -L "$p" out/lib/ || true
+          done < <(ldd "$BT/zipalign" | awk '/=> \/|^\// {for(i=1;i<=NF;i++) if($i ~ /^\//) print $i}')
+          find out -maxdepth 2 -type f -printf '%p %s\n'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zipalign-runtime
+          path: out/
+          if-no-files-found: error
