@@ -1,0 +1,17 @@
+name: Export Apktool
+on:
+  push:
+    branches: [android13-clean-workflow]
+  workflow_dispatch:
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Apktool
+        run: |
+          wget -q https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar -O apktool.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apktool-runtime
+          path: apktool.jar
