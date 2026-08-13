@@ -1,0 +1,295 @@
+name: Build Greenman Tablet Print Shell
+
+on:
+  push:
+    branches:
+      - android13-clean-workflow
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Create clean tablet project
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p tablet/app/src/main/java/com/greenman/hedgewitchery/tablet
+          mkdir -p tablet/app/src/main/res/values
+          mkdir -p tablet/app/src/main/res/drawable-nodpi
+          mkdir -p tablet/app/src/main/res/mipmap-anydpi-v26
+          mkdir -p tablet/app/src/main/res/mipmap
+          mkdir -p tablet/app/src/main/assets
+
+          cat > tablet/settings.gradle <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name='GreenmanTablet'
+          include ':app'
+          EOF
+
+          cat > tablet/build.gradle <<'EOF'
+          plugins { id 'com.android.application' version '8.7.3' apply false }
+          EOF
+
+          cat > tablet/app/build.gradle <<'EOF'
+          plugins { id 'com.android.application' }
+          android {
+            namespace 'com.greenman.hedgewitchery.tablet'
+            compileSdk 35
+            defaultConfig {
+              applicationId 'com.greenman.hedgewitchery.tablet'
+              minSdk 29
+              targetSdk 35
+              versionCode 1
+              versionName '1.0-tablet'
+            }
+          }
+          EOF
+
+          cat > tablet/app/src/main/res/values/styles.xml <<'EOF'
+          <resources>
+            <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+              <item name="android:windowNoTitle">true</item>
+              <item name="android:colorAccent">#C7A85A</item>
+              <item name="android:statusBarColor">#2A1A08</item>
+              <item name="android:navigationBarColor">#2A1A08</item>
+              <item name="android:windowLightStatusBar">false</item>
+              <item name="android:windowLightNavigationBar">false</item>
+            </style>
+            <color name="launcher_bg">#183D24</color>
+          </resources>
+          EOF
+
+          python3 - <<'PY'
+          import base64,pathlib
+          b=base64.b64decode('UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEAAUAmJaQAA3AA/v89WAAAAA==')
+          pathlib.Path('tablet/app/src/main/res/drawable-nodpi/greenman_launcher_art.webp').write_bytes(b)
+          PY
+
+          cat > tablet/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+            <background android:drawable="@color/launcher_bg" />
+            <foreground android:drawable="@drawable/greenman_launcher_art" />
+          </adaptive-icon>
+          EOF
+          cp tablet/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml tablet/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+
+          cat > tablet/app/src/main/res/mipmap/ic_launcher.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <layer-list xmlns:android="http://schemas.android.com/apk/res/android"><item android:drawable="@drawable/greenman_launcher_art" /></layer-list>
+          EOF
+          cp tablet/app/src/main/res/mipmap/ic_launcher.xml tablet/app/src/main/res/mipmap/ic_launcher_round.xml
+
+          cat > tablet/app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <application android:label="Greenman HedgeWitchery" android:theme="@style/AppTheme" android:allowBackup="false" android:hardwareAccelerated="true" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round">
+              <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|uiMode">
+                <intent-filter>
+                  <action android:name="android.intent.action.MAIN" />
+                  <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter>
+              </activity>
+            </application>
+          </manifest>
+          EOF
+
+          cat > tablet/app/src/main/assets/index.html <<'EOF'
+          <!doctype html><html><body>Greenman placeholder</body></html>
+          EOF
+          cat > tablet/app/src/main/assets/greenman-runtime-bridge.js <<'EOF'
+          // replaced with the exact protected Greenman runtime bridge after build
+          EOF
+
+          cat > tablet/app/src/main/java/com/greenman/hedgewitchery/tablet/MainActivity.java <<'EOF'
+          package com.greenman.hedgewitchery.tablet;
+
+          import android.app.Activity;
+          import android.content.ContentValues;
+          import android.content.Intent;
+          import android.graphics.Color;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.os.Environment;
+          import android.print.PrintAttributes;
+          import android.print.PrintManager;
+          import android.provider.MediaStore;
+          import android.util.Base64;
+          import android.view.View;
+          import android.view.ViewGroup;
+          import android.view.WindowInsets;
+          import android.view.WindowInsetsController;
+          import android.webkit.JavascriptInterface;
+          import android.webkit.MimeTypeMap;
+          import android.webkit.ValueCallback;
+          import android.webkit.WebChromeClient;
+          import android.webkit.WebResourceRequest;
+          import android.webkit.WebResourceResponse;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.widget.FrameLayout;
+          import android.widget.Toast;
+          import java.io.ByteArrayInputStream;
+          import java.io.IOException;
+          import java.io.InputStream;
+          import java.io.OutputStream;
+          import java.net.URLConnection;
+          import java.nio.charset.StandardCharsets;
+          import java.text.SimpleDateFormat;
+          import java.util.Collections;
+          import java.util.Date;
+          import java.util.Locale;
+
+          public final class MainActivity extends Activity {
+            static final String HOST="greenman.local";
+            static final String START="https://greenman.local/index.html";
+            static final int FILE_REQUEST=4107;
+            FrameLayout root;
+            WebView web,printWeb;
+            int printSerial=0;
+            ValueCallback<Uri[]> fileCallback;
+            View customView;
+            WebChromeClient.CustomViewCallback customCallback;
+            GreenChrome chrome;
+
+            @Override protected void onCreate(Bundle b){
+              super.onCreate(b);
+              requestWindowFeature(1);
+              immersive();
+              root=new FrameLayout(this); root.setBackgroundColor(Color.rgb(42,26,8)); setContentView(root);
+              web=new WebView(this); web.setBackgroundColor(Color.rgb(42,26,8)); root.addView(web,new FrameLayout.LayoutParams(-1,-1));
+              configure();
+              if(b==null) web.loadUrl(START); else web.restoreState(b);
+            }
+
+            void configure(){
+              WebView.setWebContentsDebuggingEnabled(false);
+              WebSettings s=web.getSettings();
+              s.setJavaScriptEnabled(true); s.setDomStorageEnabled(true); s.setDatabaseEnabled(true);
+              s.setAllowContentAccess(true); s.setAllowFileAccess(true);
+              s.setAllowFileAccessFromFileURLs(false); s.setAllowUniversalAccessFromFileURLs(false);
+              s.setBuiltInZoomControls(false); s.setDisplayZoomControls(false); s.setSupportZoom(false);
+              s.setUseWideViewPort(true); s.setLoadWithOverviewMode(false);
+              s.setMediaPlaybackRequiresUserGesture(false); s.setCacheMode(WebSettings.LOAD_DEFAULT);
+              s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+              s.setJavaScriptCanOpenWindowsAutomatically(false); s.setSupportMultipleWindows(false);
+              web.addJavascriptInterface(new Bridge(),"GreenmanAndroid");
+              web.setWebViewClient(new AssetClient());
+              chrome=new GreenChrome(); web.setWebChromeClient(chrome);
+              web.setDownloadListener((u,a,d,m,l)->{ try{ download(u,d,m); }catch(Exception e){ toast("The file could not be saved."); } });
+            }
+
+            class AssetClient extends WebViewClient {
+              @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest r){ return assetResponse(r.getUrl(),false); }
+              @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){ return !HOST.equalsIgnoreCase(r.getUrl().getHost()); }
+              @Override public void onPageFinished(WebView v,String u){
+                super.onPageFinished(v,u);
+                String js="(function(){try{if(window.__greenmanNativeBridgeLoader)return;window.__greenmanNativeBridgeLoader=true;var s=document.createElement('script');s.src='https://greenman.local/greenman-runtime-bridge.js';s.async=false;(document.head||document.documentElement).appendChild(s);}catch(e){window.__greenmanNativeBridgeLoader=false;}})();";
+                web.evaluateJavascript(js,null);
+              }
+            }
+
+            WebResourceResponse assetResponse(Uri uri,boolean printing){
+              String scheme=uri.getScheme();
+              if(printing && ("data".equalsIgnoreCase(scheme)||"about".equalsIgnoreCase(scheme)||"blob".equalsIgnoreCase(scheme))) return null;
+              if(!HOST.equalsIgnoreCase(uri.getHost())) return blocked();
+              String p=uri.getPath(); if(p==null||p.isEmpty()||"/".equals(p)) p="/index.html"; if(p.contains("..")) return blocked();
+              String a=p.startsWith("/")?p.substring(1):p;
+              try{ InputStream in=getAssets().open(a); String mime=mime(a); String enc=textMime(mime)?"UTF-8":null; WebResourceResponse x=new WebResourceResponse(mime,enc,in); x.setStatusCodeAndReasonPhrase(200,"OK"); return x; }
+              catch(IOException e){ return blocked(); }
+            }
+
+            class GreenChrome extends WebChromeClient {
+              @Override public boolean onShowFileChooser(WebView w,ValueCallback<Uri[]> cb,FileChooserParams p){
+                if(fileCallback!=null) fileCallback.onReceiveValue(null); fileCallback=cb;
+                Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*");
+                i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/json","text/plain","text/html","text/csv","application/zip","application/pdf","image/*"});
+                try{ startActivityForResult(i,FILE_REQUEST); return true; } catch(Exception e){ fileCallback=null; toast("No file picker is available."); return false; }
+              }
+              @Override public void onShowCustomView(View v,CustomViewCallback c){ if(customView!=null){c.onCustomViewHidden();return;} customView=v;customCallback=c;web.setVisibility(View.GONE);root.addView(v,new FrameLayout.LayoutParams(-1,-1));immersive(); }
+              @Override public void onHideCustomView(){ if(customView==null)return;root.removeView(customView);customView=null;web.setVisibility(View.VISIBLE);if(customCallback!=null){customCallback.onCustomViewHidden();customCallback=null;}immersive(); }
+            }
+
+            class Bridge {
+              @JavascriptInterface public void refreshImmersive(){ runOnUiThread(()->{immersive();web.postDelayed(()->immersive(),140);web.postDelayed(()->immersive(),420);}); }
+              @JavascriptInterface public void showMessage(String m){ runOnUiThread(()->toast(m)); }
+              @JavascriptInterface public void saveBase64(String n,String m,String d){ runOnUiThread(()->saveBase64(n,m,d)); }
+              @JavascriptInterface public void printDocument(String h,String n){ runOnUiThread(()->openPrint(h,n)); }
+            }
+
+            class PrintClient extends WebViewClient {
+              final int serial; boolean sent=false; PrintClient(int s){serial=s;}
+              @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest r){ return assetResponse(r.getUrl(),true); }
+              @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){ Uri u=r.getUrl();String s=u.getScheme();if("data".equalsIgnoreCase(s)||"about".equalsIgnoreCase(s)||"blob".equalsIgnoreCase(s))return false;return !HOST.equalsIgnoreCase(u.getHost()); }
+              @Override public void onPageFinished(WebView v,String u){ super.onPageFinished(v,u);if(sent||v!=printWeb||serial!=printSerial)return;sent=true;v.postDelayed(()->{if(v==printWeb&&serial==printSerial)printNow(v,"Greenman HedgeWitchery");},1150); }
+            }
+
+            void openPrint(String html,String requested){
+              if(html==null||html.trim().length()<80){toast("The print document was empty.");return;}
+              destroyPrint(); int serial=++printSerial; String job=jobName(requested);
+              WebView t=new WebView(this);printWeb=t;t.setTag(job);t.setBackgroundColor(Color.WHITE);t.setAlpha(1f);t.setVisibility(View.VISIBLE);t.setFocusable(false);t.setClickable(false);
+              WebSettings s=t.getSettings();s.setJavaScriptEnabled(false);s.setDomStorageEnabled(false);s.setDatabaseEnabled(false);s.setAllowContentAccess(true);s.setAllowFileAccess(false);s.setAllowFileAccessFromFileURLs(false);s.setAllowUniversalAccessFromFileURLs(false);s.setBuiltInZoomControls(false);s.setDisplayZoomControls(false);s.setSupportZoom(false);s.setUseWideViewPort(false);s.setLoadWithOverviewMode(false);s.setTextZoom(100);s.setMediaPlaybackRequiresUserGesture(true);s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);s.setJavaScriptCanOpenWindowsAutomatically(false);s.setSupportMultipleWindows(false);
+              t.setWebViewClient(new PrintClient(serial));t.setWebChromeClient(new WebChromeClient());FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(820,1120);root.addView(t,0,lp);t.loadDataWithBaseURL(START,viewport(html),"text/html","UTF-8",null);
+            }
+
+            void printNow(WebView t,String fallback){
+              try{ PrintManager pm=(PrintManager)getSystemService(PRINT_SERVICE);Object tag=t.getTag();String job=jobName(tag instanceof String?(String)tag:fallback);PrintAttributes a=new PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).setMinMargins(PrintAttributes.Margins.NO_MARGINS).setColorMode(PrintAttributes.COLOR_MODE_COLOR).build();pm.print(job,t.createPrintDocumentAdapter(job),a);t.postDelayed(()->{if(printWeb==t)destroyPrint();},120000); }
+              catch(Exception e){toast("Printing could not be opened.");}
+            }
+
+            static String viewport(String h){String l=h.toLowerCase(Locale.ROOT);if(l.contains("name=\"viewport\"")||l.contains("name='viewport'"))return h;String tag="<meta name=\"viewport\" content=\"width=820, initial-scale=1.0, maximum-scale=1.0, user-scalable=no\">";int x=l.indexOf("<head>");return x<0?tag+h:h.substring(0,x+6)+tag+h.substring(x+6);}
+            static String jobName(String n){String x=(n==null?"Greenman HedgeWitchery":n.trim()).replaceAll("[\\r\\n\\t\\p{Cntrl}]"," ").replaceAll("\\s+"," ");if(x.isEmpty())x="Greenman HedgeWitchery";return x.length()>80?x.substring(0,80):x;}
+            void destroyPrint(){WebView t=printWeb;printWeb=null;if(t==null)return;try{if(t.getParent() instanceof ViewGroup)((ViewGroup)t.getParent()).removeView(t);t.stopLoading();t.setWebChromeClient(null);t.setWebViewClient(null);t.destroy();}catch(Exception ignored){}}
+
+            void download(String url,String disp,String mt)throws IOException{
+              String n=downloadName(disp,mt);if(url==null)return;
+              if(url.startsWith("blob:")){String js="fetch("+q(url)+").then(r=>r.blob()).then(b=>{const f=new FileReader();f.onloadend=()=>{const s=String(f.result||'');GreenmanAndroid.saveBase64("+q(n)+",b.type||"+q(mt)+",s.substring(s.indexOf(',')+1));};f.readAsDataURL(b);});";web.evaluateJavascript(js,null);return;}
+              if(!url.startsWith("data:")){toast("Only offline Greenman files can be downloaded in this app.");return;}
+              int c=url.indexOf(',');if(c<0)return;String head=url.substring(5,c),data=url.substring(c+1),det=head.split(";",2)[0];if(det.isEmpty())det=mt;if(head.contains(";base64"))saveBase64(n,det,data);else saveBytes(n,det,Uri.decode(data).getBytes(StandardCharsets.UTF_8));
+            }
+            void saveBase64(String n,String mt,String d){try{saveBytes(n,mt,Base64.decode(d,Base64.DEFAULT));}catch(Exception e){toast("The export could not be decoded.");}}
+            void saveBytes(String n,String mt,byte[] b)throws IOException{String safe=fileName(n,mt);ContentValues v=new ContentValues();v.put(MediaStore.MediaColumns.DISPLAY_NAME,safe);v.put(MediaStore.MediaColumns.MIME_TYPE,mt==null||mt.isEmpty()?"application/octet-stream":mt);v.put(MediaStore.MediaColumns.RELATIVE_PATH,Environment.DIRECTORY_DOWNLOADS+"/Greenman HedgeWitchery");v.put(MediaStore.MediaColumns.IS_PENDING,1);Uri u=null;try{u=getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,v);if(u==null)throw new IOException();try(OutputStream o=getContentResolver().openOutputStream(u)){if(o==null)throw new IOException();o.write(b);o.flush();}ContentValues done=new ContentValues();done.put(MediaStore.MediaColumns.IS_PENDING,0);getContentResolver().update(u,done,null,null);toast("Saved to Downloads/Greenman HedgeWitchery/"+safe);}catch(Exception e){if(u!=null)getContentResolver().delete(u,null,null);toast("The file could not be saved.");}}
+            static String downloadName(String d,String mt){if(d!=null){String l=d.toLowerCase(Locale.ROOT);int x=l.indexOf("filename=");if(x>=0){String n=d.substring(x+9).trim();if(n.startsWith("\"")&&n.endsWith("\"")&&n.length()>1)n=n.substring(1,n.length()-1);if(!n.isEmpty())return n;}}return "greenman-export-"+new SimpleDateFormat("yyyyMMdd-HHmmss",Locale.UK).format(new Date())+ext(mt);}
+            static String fileName(String n,String mt){String x=(n==null?"greenman-export":n.trim()).replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]","_");if(x.isEmpty())x="greenman-export";return x.contains(".")?x:x+ext(mt);}
+            static String ext(String mt){if(mt==null)return ".bin";String e=MimeTypeMap.getSingleton().getExtensionFromMimeType(mt);return e==null||e.isEmpty()?".bin":"."+e;}
+            static String q(String s){if(s==null)return "''";return "'"+s.replace("\\","\\\\").replace("'","\\'").replace("\r","\\r").replace("\n","\\n")+"'";}
+            WebResourceResponse blocked(){return new WebResourceResponse("text/plain","UTF-8",403,"Blocked",Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));}
+            static String mime(String p){String l=p==null?"":p.toLowerCase(Locale.ROOT);if(l.endsWith(".ttf"))return "font/ttf";if(l.endsWith(".woff2"))return "font/woff2";if(l.endsWith(".js"))return "application/javascript";String g=URLConnection.guessContentTypeFromName(p);if(g!=null)return g;String e=MimeTypeMap.getFileExtensionFromUrl(p),m=MimeTypeMap.getSingleton().getMimeTypeFromExtension(e);return m==null?"application/octet-stream":m;}
+            static boolean textMime(String m){return m.startsWith("text/")||m.contains("javascript")||m.contains("json")||m.contains("xml")||m.contains("svg");}
+            void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
+
+            @Override protected void onActivityResult(int r,int c,Intent d){super.onActivityResult(r,c,d);if(r!=FILE_REQUEST||fileCallback==null)return;Uri[] out=null;if(c==RESULT_OK&&d!=null&&d.getData()!=null)out=new Uri[]{d.getData()};fileCallback.onReceiveValue(out);fileCallback=null;}
+            @Override public void onBackPressed(){if(customView!=null){chrome.onHideCustomView();return;}web.evaluateJavascript("(function(){try{if(typeof window.gmAndroidBack==='function')return String(!!window.gmAndroidBack());}catch(e){}return 'false';})()",v->{boolean h=v!=null&&(v.contains("true")||v.contains("\\\"true\\\""));if(h)return;if(web.canGoBack())web.goBack();else finish();});}
+            @Override protected void onSaveInstanceState(Bundle b){web.saveState(b);super.onSaveInstanceState(b);}
+            @Override protected void onResume(){super.onResume();if(web!=null)web.onResume();immersive();}
+            @Override protected void onPause(){if(web!=null)web.onPause();super.onPause();}
+            @Override protected void onDestroy(){destroyPrint();if(web!=null){web.loadUrl("about:blank");web.stopLoading();web.setWebChromeClient(null);web.setWebViewClient(null);web.removeJavascriptInterface("GreenmanAndroid");web.destroy();}super.onDestroy();}
+            @Override public void onWindowFocusChanged(boolean f){super.onWindowFocusChanged(f);if(f)immersive();}
+            void immersive(){if(Build.VERSION.SDK_INT>=30){WindowInsetsController c=getWindow().getInsetsController();if(c!=null){c.hide(WindowInsets.Type.statusBars()|WindowInsets.Type.navigationBars());c.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);}}else getWindow().getDecorView().setSystemUiVisibility(5894);}
+          }
+          EOF
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd tablet
+          gradle --no-daemon :app:assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk ../GREENMAN_TABLET_PRINT_SHELL.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: greenman-tablet-print-shell
+          path: GREENMAN_TABLET_PRINT_SHELL.apk
+          if-no-files-found: error
