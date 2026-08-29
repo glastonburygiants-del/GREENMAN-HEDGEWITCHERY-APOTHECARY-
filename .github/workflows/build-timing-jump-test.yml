@@ -1,0 +1,99 @@
+name: Build Timing Jump Test APK
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+
+      - name: Verify clean baseline files
+        run: |
+          set -euo pipefail
+          test -s GREENMAN_HEDGEWITCHERY.apk
+          test -s GREENMAN_EDITABLE_CURRENT.html
+          sha256sum GREENMAN_HEDGEWITCHERY.apk GREENMAN_EDITABLE_CURRENT.html
+
+      - name: Remove only the automatic timing jumps
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('GREENMAN_EDITABLE_CURRENT.html')
+          s=p.read_text(encoding='utf-8')
+          old_planet=r"closeKb();\n  render();\n  jumpTo('timing');\n}"
+          new_planet=r"closeKb();\n  render();\n}"
+          old_planet_first=r"closeKb();\n    render();\n    jumpTo('timing');\n    return;"
+          new_planet_first=r"closeKb();\n    render();\n    return;"
+          old_moon=r"showP(key, btn);\n      // Scroll to phase detail\n      document.getElementById('pd-icon').parentElement.scrollIntoView({behavior:'smooth', block:'start'});"
+          new_moon=r"showP(key, btn);"
+          for label,old,new in [
+              ('Planet item selection',old_planet,new_planet),
+              ('Planet first-match selection',old_planet_first,new_planet_first),
+              ('Moon item phase selection',old_moon,new_moon),
+          ]:
+              c=s.count(old)
+              if c != 1: raise SystemExit(f'{label}: expected 1 exact match, found {c}')
+              s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          print('Removed only the three automatic scroll calls used after item selection')
+          PY
+
+      - name: Repack exact current APK with edited HTML
+        run: |
+          set -euo pipefail
+          mkdir apkwork
+          cd apkwork
+          unzip -q ../GREENMAN_HEDGEWITCHERY.apk
+          rm -rf META-INF
+          cp ../GREENMAN_EDITABLE_CURRENT.html assets/index.html
+          zip -qr ../unsigned.apk .
+          cd ..
+
+      - name: Install Android build tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "build-tools;35.0.0"
+
+      - name: Sign with the same Greenman test certificate
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/glastonburygiants-del/GREENMAN-HEDGEWITCHERY-app/main/tools/greenman_debug_keystore.b64 -o key.b64
+          base64 --decode key.b64 > greenman.keystore
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f 4 unsigned.apk aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks greenman.keystore --ks-key-alias androiddebugkey \
+            --ks-pass pass:android --key-pass pass:android \
+            --out GREENMAN_HEDGEWITCHERY_TIMING_NO_JUMP_TEST.apk aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs GREENMAN_HEDGEWITCHERY_TIMING_NO_JUMP_TEST.apk
+
+      - name: Verify only app HTML differs
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import zipfile, hashlib
+          a='GREENMAN_HEDGEWITCHERY.apk'; b='GREENMAN_HEDGEWITCHERY_TIMING_NO_JUMP_TEST.apk'
+          def files(path):
+              with zipfile.ZipFile(path) as z:
+                  return {n:hashlib.sha256(z.read(n)).hexdigest() for n in z.namelist() if not n.startswith('META-INF/')}
+          A=files(a); B=files(b)
+          diff=sorted(n for n in set(A)|set(B) if A.get(n)!=B.get(n))
+          print('Non-signature differences:', diff)
+          if diff != ['assets/index.html']:
+              raise SystemExit('Unexpected APK content changed')
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GREENMAN-HEDGEWITCHERY-TIMING-NO-JUMP-TEST
+          path: GREENMAN_HEDGEWITCHERY_TIMING_NO_JUMP_TEST.apk
+          if-no-files-found: error
+          retention-days: 7
